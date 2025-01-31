@@ -162,3 +162,5 @@ cython_debug/
 # Custom
 data/
 checkpts/
+/spider
+/log/
