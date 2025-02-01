@@ -1,21 +1,3 @@
-### LLM Planning
-llm-planning-eval paper [When is Tree Search Useful for LLM Planning? It Depends on the Discriminator](https://arxiv.org/abs/2402.10890).
-
-### Comparison of Naive LLM Discriminators on Spider dataset
-
-| Model                              | PWS Acc | Pos F1  | Neg F1  | Macro F1 | Hit @ 1 | MRR   |
-|-------------------------------------|---------|---------|---------|----------|--------|-------|
-| Spider Tinyllama 1B                | 0.8411  | 0.0000  | 0.7419  | 0.3709   | 0.6425 | 0.6758 |
-| DeepSeek-R1-Distill-Qwen-1.5B      | 0.7897  | 0.0000  | 0.7419  | 0.3709   | 0.6200 | 0.6629 |
-| deepseek-coder-1.3b                | 0.8289  | 0.0000  | 0.7419  | 0.3709   | 0.6500 | 0.6806 |
-| stable-code-3b                     | 0.8313  | 0.0000  | 0.7419  | 0.3709   | 0.6350 | 0.6727 |
-| Spider Tinyllama 1B FT             | 0.8411  | 0.7683  | 0.7714  | 0.7699   | 0.6600 | 0.6865 |
-| DeepSeek-R1-Distill-Qwen-1.5B FT   | 0.8484  | 0.7403  | 0.7654  | 0.7528   | 0.6575 | 0.6848 |
-
-Pair count:409 ; SQL Count: 1221
-
-
-### Old Legacy Documentation:
 #### llm-planning-eval
 Code and data for our paper [When is Tree Search Useful for LLM Planning? It Depends on the Discriminator](https://arxiv.org/abs/2402.10890).
 
