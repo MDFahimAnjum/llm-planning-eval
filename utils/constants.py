@@ -6,6 +6,8 @@ TEMPLATE_EVAL_RES = "-- Utterance: {}\n-- SQL:\n{}\n-- Result:\n{}"
 
 INST_CODELLAMA_GEN = "[INST] Given database schema and a question in natural language, generate the corresponding SQL query.\n\n{} [/INST]"
 
+INST_CUSTOM_GEN = "Given database schema and a question in natural language, generate the corresponding SQL query.\n\n{} "
+
 INST_CODELLAMA_ITER_CORR = "[INST] Given database schema and a question in natural language, correct the buggy SQL query and generate a fixed SQL query.\n\n{} [/INST]"
 
 INST_CODELLAMA_EVAL = "[INST] Answer the following Yes/No question: Is the SQL correct given the utterance?\n\n{}\n-- Answer: [/INST]" 

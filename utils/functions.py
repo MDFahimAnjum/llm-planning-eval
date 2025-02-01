@@ -141,15 +141,19 @@ def eval_intrinsic(evaluator, test_fname,evaluation_config,log_fname=""):
 
 
 # run llm planning end-to-end and save the results
-def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname,device_swap=False,prompt_method=0):
+def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname,device_swap=False,prompt_method=0,limit=None):
     # load data
     test_data = json.load(open(test_fname))
+    
+    # limit the number of examples
+    if limit:
+        test_data = test_data[:limit]
 
     results = [] # store the results
     log = [] # store the logs
 
     # generate responses using planner
-    for ex in tqdm(test_data[:3]):
+    for ex in tqdm(test_data):
         res_sql = planner(ex, generator, evaluator, retriever_gen, retriever_eval,generation_config, evaluation_config, log, device_swap,prompt_method)
         
         # add the result to the results list

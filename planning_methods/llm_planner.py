@@ -1,4 +1,4 @@
-from utils.constants import TEMPLATE, INST_CODELLAMA_GEN,TEMPLATE_CORR, INST_CODELLAMA_ITER_CORR
+from utils.constants import TEMPLATE, INST_CODELLAMA_GEN,TEMPLATE_CORR, INST_CODELLAMA_ITER_CORR, INST_CUSTOM_GEN
 from utils.normalize_sql import normalize_sql
 from func_timeout import func_timeout
 from copy import deepcopy
@@ -9,7 +9,7 @@ import json
 import torch
 from utils.functions import swap_memory
 
-def prepare_prompt(example, retriever_gen,prompt_method=0):
+def prepare_prompt(example, retriever_gen,prompt_method=0,headstr="SELECT"):
     # prepare prompt
     if retriever_gen is None:
         model_inp = TEMPLATE.format(example["db_id"], example["schema"], example["question"])
@@ -20,7 +20,9 @@ def prepare_prompt(example, retriever_gen,prompt_method=0):
         prompt = model_inp + "\n\n" + TEMPLATE.format(example["db_id"], example["schema"], example["question"])
     # add instruction
     if prompt_method == 0:
-        prompt = INST_CODELLAMA_GEN.format(prompt) + " SELECT"
+        prompt = INST_CODELLAMA_GEN.format(prompt) + " " + headstr
+    elif prompt_method == 2:
+        prompt = INST_CUSTOM_GEN.format(prompt) + " " + headstr
     return prompt
 
 # Prompt the generator for 0-shot correction
@@ -41,8 +43,15 @@ def generate_completions(generator,prompt,config,device_swap):
         swap_memory(generator.model, device="cpu", verbose=False)   
     return responses
 
+# experimental extraction. Works so far.
+def extract_completionsV2(responses, prompt, headstr):
+    # extract completions: collect text after prompt, add back any leading query (headstr) and before the next section (\n\n) if exists
+    sql_completions = list(set([normalize_sql((headstr + " " + r.split(prompt)[-1]).split("\n\n")[0]) \
+                                for r in responses if (headstr + " " + r.split(prompt)[-1]).split("\n\n")[0] != ""]))
+    return sql_completions
+
 def extract_completions(responses,prompt_method=0):
-    # extract completions
+    # extract completions: collect text after [-- SQL:] or [/INST] and before the next section (\n\n) if exists
     if prompt_method == 0:
         sql_completions = list(set([normalize_sql(r.split(" [/INST] ")[-1].split("\n\n")[0]) for r in responses if r.split(" [/INST] ")[-1].split("\n\n")[0] != ""]))
     elif prompt_method == 1:
@@ -88,7 +97,8 @@ def rerank(example, generator, evaluator, retriever_gen, retriever_eval, generat
     responses = generate_completions(generator,prompt,config,device_swap)
 
     # extract completions
-    sql_completions = extract_completions(responses,prompt_method)
+    #sql_completions = extract_completions(responses,prompt_method)
+    sql_completions = extract_completionsV2(responses, prompt, headstr="SELECT")
 
     # evaluate completions
     scores = evaluate_completion(evaluator, example, sql_completions, evaluation_config, retriever_eval, device_swap)
@@ -112,7 +122,8 @@ def greedy(example, generator, evaluator, retriever_gen, retriever_eval, generat
     responses = generate_completions(generator,prompt,config,device_swap)
 
     # extract completions
-    sql_completions = extract_completions(responses,prompt_method)
+    #sql_completions = extract_completions(responses,prompt_method)
+    sql_completions = extract_completionsV2(responses, prompt, headstr="SELECT")
 
     # log
     log_example(log, example, sql_completions)
@@ -128,7 +139,7 @@ def iter_correction(example, generator, evaluator, retriever_gen, retriever_eval
     evaluation_config = json.load(open(evaluation_config))
 
     # Step 1: Prompt the generator and sample initial plans.
-    prompt = prepare_prompt(example, retriever_gen,prompt_method=0)
+    prompt = prepare_prompt(example, retriever_gen,prompt_method)
     
     # generate completions
     responses = generate_completions(generator,prompt,config,device_swap)
