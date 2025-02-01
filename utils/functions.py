@@ -19,6 +19,23 @@ def check_nltk_resource():
         print("Downloading 'punkt_tab'...")
         nltk.download('punkt_tab')
 
+# swap between ram and vram
+def swap_memory(model,device=None,verbose=False):
+    # if device is not provided, swap between cpu and cuda
+    if not device:
+        device = "cuda" if model.device == "cpu" else "cpu"
+    
+    # make the swap
+    model.to(device)
+    
+    # print the device
+    if verbose:
+        print(f"Model on {model.device}")
+    
+    # Releases unused GPU memory (if any)
+    if device == "cpu":
+        torch.cuda.empty_cache()  
+
 # set result filename
 def set_result_filename(evaluator_name, generator_name, db_name, method_name):
     return generator_name.split("/")[-1] + "_" + evaluator_name.split("/")[-1] + "_" + db_name + "_" + method_name
@@ -124,7 +141,7 @@ def eval_intrinsic(evaluator, test_fname,evaluation_config,log_fname=""):
 
 
 # run llm planning end-to-end and save the results
-def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname):
+def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname,device_swap=False):
     # load data
     test_data = json.load(open(test_fname))
 
@@ -133,7 +150,7 @@ def run_end2end(generator, evaluator,generation_config, evaluation_config, plann
 
     # generate responses using planner
     for ex in tqdm(test_data[:3]):
-        res_sql = planner(ex, generator, evaluator, retriever_gen, retriever_eval,generation_config, evaluation_config, log)
+        res_sql = planner(ex, generator, evaluator, retriever_gen, retriever_eval,generation_config, evaluation_config, log, device_swap)
         
         # add the result to the results list
         if dataset_name == "spider":
