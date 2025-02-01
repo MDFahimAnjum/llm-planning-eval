@@ -141,7 +141,7 @@ def eval_intrinsic(evaluator, test_fname,evaluation_config,log_fname=""):
 
 
 # run llm planning end-to-end and save the results
-def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname,device_swap=False):
+def run_end2end(generator, evaluator,generation_config, evaluation_config, planner, retriever_gen, retriever_eval, test_fname,dataset_name,result_fname,log_fname,device_swap=False,prompt_method=0):
     # load data
     test_data = json.load(open(test_fname))
 
@@ -150,7 +150,7 @@ def run_end2end(generator, evaluator,generation_config, evaluation_config, plann
 
     # generate responses using planner
     for ex in tqdm(test_data[:3]):
-        res_sql = planner(ex, generator, evaluator, retriever_gen, retriever_eval,generation_config, evaluation_config, log, device_swap)
+        res_sql = planner(ex, generator, evaluator, retriever_gen, retriever_eval,generation_config, evaluation_config, log, device_swap,prompt_method)
         
         # add the result to the results list
         if dataset_name == "spider":
