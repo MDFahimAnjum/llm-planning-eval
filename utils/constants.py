@@ -1,11 +1,12 @@
 TEMPLATE = "-- Database {}:\n{}\n-- Question: {}\n -- SQL:\n"
 TEMPLATE_CORR = "-- Database {}:\n{}\n-- Question: {}\n -- Buggy SQL:\n{}\n -- Fixed SQL:\n"
+TEMPLATE_SIMPLE_DDL_MD_CHAT = "{}\n\n### {}" # tables and question
 
 TEMPLATE_EVAL = "-- Utterance: {}\n-- SQL:\n{}"
 TEMPLATE_EVAL_RES = "-- Utterance: {}\n-- SQL:\n{}\n-- Result:\n{}"
 
 INST_CODELLAMA_GEN = "[INST] Given database schema and a question in natural language, generate the corresponding SQL query.\n\n{} [/INST]"
-
+INST_GEN_SIMPLE_DDL_MD_CHAT = "### Answer the question by sqlite SQL query only and with no explanation\n\n### Sqlite SQL tables, with their properties:\n{}\n### SQL:"
 INST_CUSTOM_GEN = "Given database schema and a question in natural language, generate the corresponding SQL query.\n\n{} "
 
 INST_CODELLAMA_ITER_CORR = "[INST] Given database schema and a question in natural language, correct the buggy SQL query and generate a fixed SQL query.\n\n{} [/INST]"

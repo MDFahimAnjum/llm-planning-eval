@@ -1,4 +1,4 @@
-from utils.constants import TEMPLATE, INST_CODELLAMA_GEN,TEMPLATE_CORR, INST_CODELLAMA_ITER_CORR, INST_CUSTOM_GEN
+from utils.constants import TEMPLATE, INST_CODELLAMA_GEN,TEMPLATE_CORR, INST_CODELLAMA_ITER_CORR, INST_CUSTOM_GEN, INST_GEN_SIMPLE_DDL_MD_CHAT, TEMPLATE_SIMPLE_DDL_MD_CHAT
 from utils.normalize_sql import normalize_sql
 from func_timeout import func_timeout
 from copy import deepcopy
@@ -31,6 +31,15 @@ def prepare_prompt(example, retriever_gen, prompt_method=0, headstr="SELECT"):
         prompt = INST_CUSTOM_GEN.format(prompt) + " " + headstr
     return prompt, model_inp
 
+# Impliments SIMPLE_DDL_MD_CHAT prompt format
+def prepare_promptV2(example, retriever_gen=None, prompt_method=0, headstr=""):
+    # prepare prompt
+    model_inp = TEMPLATE_SIMPLE_DDL_MD_CHAT.format(example["schema"], example["question"])
+    prompt = model_inp
+    # add instruction
+    prompt = INST_GEN_SIMPLE_DDL_MD_CHAT.format(prompt)
+    return prompt, model_inp
+
 # Prompt the generator for 0-shot correction
 def prepare_prompt_correction(example, answer_sql, prompt_method=0, headstr="SELECT"):
     prompt = TEMPLATE_CORR.format(example["db_id"], example["schema"], example["question"], answer_sql)
@@ -51,9 +60,51 @@ def generate_completions(generator,prompt,config,device_swap):
 
 # experimental extraction. Works so far.
 def extract_completionsV2(responses, prompt, headstr):
+    if headstr:
+        header = headstr + " "
+    else:
+        header = ""
     # extract completions: collect text after prompt, add back any leading query (headstr) and before the next section (\n\n) if exists
-    sql_completions = list(set([normalize_sql((headstr + " " + r.split(prompt)[-1]).split("\n\n")[0]) \
-                                for r in responses if (headstr + " " + r.split(prompt)[-1]).split("\n\n")[0] != ""]))
+    sql_completions = list(set([normalize_sql((header + r.split(prompt)[-1]).split("\n\n")[0]) \
+                                for r in responses if (header + r.split(prompt)[-1]).split("\n\n")[0] != ""]))
+    return sql_completions
+
+# experimental extraction. Works so far.
+def extract_completionsV3(responses, prompt, headstr):
+    # if any leading part of query given in prompt
+    if headstr:
+        header = headstr + " "
+    else:
+        header = ""
+    
+    # End of SQL query.
+    sqlend = ";"
+    
+    # Divider. Used to find the tail of the answer
+    dividr = "\n\n"
+
+    # if the divider is the end of query, we need to add it back.
+    if dividr == sqlend:
+        footer = sqlend
+    else:
+        footer = ""
+    
+    # Cleaning: List of characters to replace in the SQL query 
+    rmlist = {
+        "\n": "",
+        "  ": " "
+    }
+    # extract completions: collect text after prompt, add back any leading query (headstr) and before End of SQL query
+    sql_completions = list(set([normalize_sql((header + r.split(prompt)[-1]).split(dividr)[0] + footer) \
+                                for r in responses if (header + r.split(prompt)[-1]).split(dividr)[0] + footer != ""]))
+    # Clean the queries
+    for i in range(len(sql_completions)):
+        for key in rmlist.keys():
+            sql_completions[i] = sql_completions[i].replace(key, rmlist[key])
+        
+        if sqlend not in sql_completions[i]:
+           sql_completions[i] += sqlend 
+
     return sql_completions
 
 def extract_completions(responses,prompt_method=0):
@@ -96,20 +147,23 @@ def log_example(log, example, sql_completions=None, scores=None, candidates_scor
 
 # rerank completions and return best completion
 def rerank(example, generator, evaluator, retriever_gen, retriever_eval, generation_config, evaluation_config, log, device_swap=False, prompt_method=0):
-    headstr = "SELECT"
     # load configs
     config = json.load(open(generation_config))
     evaluation_config = json.load(open(evaluation_config))
 
     # prepare prompt
+    headstr = "SELECT"
     prompt, _ = prepare_prompt(example, retriever_gen, prompt_method, headstr=headstr)
+    #headstr = None
+    #prompt, _ = prepare_promptV2(example, retriever_gen, prompt_method, headstr=headstr)
     
     # generate completions
     responses = generate_completions(generator,prompt,config,device_swap)
 
-    # extract completions
+    # extract completions. V3 works better for all prompt methods.
     #sql_completions = extract_completions(responses,prompt_method)
-    sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    #sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    sql_completions = extract_completionsV3(responses, prompt, headstr=headstr)
 
     # evaluate completions
     scores = evaluate_completion(evaluator, example, sql_completions, evaluation_config, retriever_eval, device_swap)
@@ -123,19 +177,25 @@ def rerank(example, generator, evaluator, retriever_gen, retriever_eval, generat
 
 # greedy completion. Only one completion is generated and returned
 def greedy(example, generator, evaluator, retriever_gen, retriever_eval, generation_config, evaluation_config, log, device_swap=False,prompt_method=0):
-    headstr = "SELECT"
     # load configs
     config = json.load(open(generation_config))
 
     # prepare prompt
+    headstr = "SELECT"
     prompt, _ = prepare_prompt(example, retriever_gen, prompt_method, headstr=headstr)
+    #headstr = None
+    #prompt, _ = prepare_promptV2(example, retriever_gen, prompt_method, headstr=headstr)
 
     # generate completions
     responses = generate_completions(generator,prompt,config,device_swap)
 
-    # extract completions
+    # extract completions. V3 works better for all prompt methods.
     #sql_completions = extract_completions(responses,prompt_method)
-    sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    #sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    sql_completions = extract_completionsV3(responses, prompt, headstr=headstr)
+
+    # debug print
+    print(f"Case:\n\nPrompt:\n{prompt}\n\nResponse:\n{responses[0]}\n\nSQL:{sql_completions[0]}")
 
     # log
     log_example(log, example, sql_completions)
@@ -146,20 +206,23 @@ def greedy(example, generator, evaluator, retriever_gen, retriever_eval, generat
 
 # iterative correction. Multiple completions are generated and scored. The best completion is used as input for the next iteration.
 def iter_correction(example, generator, evaluator, retriever_gen, retriever_eval, generation_config, evaluation_config, log, device_swap=False, prompt_method=0):
-    headstr = "SELECT"
     # load configs
     config = json.load(open(generation_config))
     evaluation_config = json.load(open(evaluation_config))
 
     # Step 1: Prompt the generator and sample initial plans.
+    headstr = "SELECT"
     prompt, _ = prepare_prompt(example, retriever_gen, prompt_method, headstr=headstr)
+    #headstr = None
+    #prompt, _ = prepare_promptV2(example, retriever_gen, prompt_method, headstr=headstr)
     
     # generate completions
     responses = generate_completions(generator,prompt,config,device_swap)
 
-    # extract completions
+    # extract completions. V3 works better for all prompt methods.
     #sql_completions = extract_completions(responses,prompt_method)
-    sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    #sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+    sql_completions = extract_completionsV3(responses, prompt, headstr=headstr)
 
     # Planning iteration setup.
     current_score = 18 #0
@@ -199,7 +262,8 @@ def iter_correction(example, generator, evaluator, retriever_gen, retriever_eval
 
         # extract completions
         #sql_completions = extract_completions(responses,prompt_method)
-        sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+        #sql_completions = extract_completionsV2(responses, prompt, headstr=headstr)
+        sql_completions = extract_completionsV3(responses, prompt, headstr=headstr)
 
     answer = answer_sql.replace("\n", " ")
 
