@@ -113,7 +113,7 @@ class LLMEvaluator():
                     input_ids=batch["input_ids"],
                     attention_mask=batch["attention_mask"]
                 )
-            
+                # negative of softmax as score. so, lower is better
                 scores.append(
                     - torch.nn.functional.softmax(
                         outputs["logits"][:, -1, :], dim=-1
