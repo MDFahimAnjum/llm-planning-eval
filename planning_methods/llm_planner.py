@@ -1,6 +1,6 @@
-from utils.constants import TEMPLATE, INST_CODELLAMA_GEN
+from utils.constants import TEMPLATE, INST_CODELLAMA_GEN,TEMPLATE_CORR, INST_CODELLAMA_ITER_CORR
 from utils.normalize_sql import normalize_sql
-
+from func_timeout import func_timeout
 from copy import deepcopy
 from transformers import GenerationConfig
 
@@ -21,6 +21,13 @@ def prepare_prompt(example, retriever_gen,prompt_method=0):
     # add instruction
     if prompt_method == 0:
         prompt = INST_CODELLAMA_GEN.format(prompt) + " SELECT"
+    return prompt
+
+# Prompt the generator for 0-shot correction
+def prepare_prompt_correction(example, answer_sql,prompt_method=0):
+    prompt = TEMPLATE_CORR.format(example["db_id"], example["schema"], example["question"], answer_sql)
+    if prompt_method == 0:
+        prompt = INST_CODELLAMA_ITER_CORR.format(prompt) + " SELECT"
     return prompt
 
 def generate_completions(generator,prompt,config,device_swap):
@@ -58,11 +65,14 @@ def evaluate_completion(evaluator, example, sql_completions, evaluation_config, 
     
     return scores
 
-def log_example(log, example, sql_completions, scores=None):
+def log_example(log, example, sql_completions=None, scores=None, candidates_scores=None):
     example_log = deepcopy(example)
-    example_log["top_n"] = sql_completions
+    if sql_completions is not None:
+        example_log["top_n"] = sql_completions
     if scores is not None:
         example_log["scores"] = scores
+    if candidates_scores is not None:
+        example_log["candidates"] = candidates_scores
     log.append(example_log)
 
 # rerank completions and return best completion
@@ -109,3 +119,65 @@ def greedy(example, generator, evaluator, retriever_gen, retriever_eval, generat
 
     # return completion
     return sql_completions[0].replace("\n", " ")
+
+
+
+def iter_correction(example, generator, evaluator, retriever_gen, retriever_eval, generation_config, evaluation_config, log, device_swap=False, prompt_method=0):
+    # load configs
+    config = json.load(open(generation_config))
+    evaluation_config = json.load(open(evaluation_config))
+
+    # Step 1: Prompt the generator and sample initial plans.
+    prompt = prepare_prompt(example, retriever_gen,prompt_method=0)
+    
+    # generate completions
+    responses = generate_completions(generator,prompt,config,device_swap)
+
+    # extract completions
+    sql_completions = extract_completions(responses,prompt_method)
+
+    # Planning iteration setup.
+    current_score = 18 #0
+    patience = 0
+    candidates_scores = {}
+    answer_sql = ""
+
+    for t in range(10):
+        # Step 2: Score the current batch of plans.
+        scores = evaluate_completion(evaluator, example, sql_completions, evaluation_config, retriever_eval, device_swap)
+
+        # Step 3: Find the plan with highest score. Scores are negated for min heap implementation in tree search.
+        best_score = min(scores)
+
+        # Step 4: Check termination conditions and replace the old plan with the currently best one, if any.
+        if best_score < -0.99:
+            answer_sql = sql_completions[np.argmin(scores)]
+            current_score = best_score
+            candidates_scores[answer_sql] = best_score
+            break
+        elif best_score >= current_score:
+            patience += 1
+            if patience >= 3:
+                break
+        else:
+            answer_sql = sql_completions[np.argmin(scores)]
+            current_score = best_score
+            candidates_scores[answer_sql] = best_score
+            patience = 0
+
+
+        # Step 5: Prompt the generator for 0-shot correction. Sample a new batch of plans.
+        prompt = prepare_prompt_correction(example, answer_sql,prompt_method)
+
+        # generate completions
+        responses = generate_completions(generator,prompt,config,device_swap)
+
+        # extract completions
+        sql_completions = extract_completions(responses,prompt_method)
+
+    answer = answer_sql.replace("\n", " ")
+
+    # log
+    log_example(log, example, candidates_scores=candidates_scores)
+
+    return answer
